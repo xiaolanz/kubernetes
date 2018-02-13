@@ -71,6 +71,10 @@ func (v *HistoryVisitor) VisitDaemonSet(kind kapps.GroupKindElement) {
 	v.result = &DaemonSetHistoryViewer{v.clientset}
 }
 
+func (v *HistoryVisitor) VisitFoo(kind kapps.GroupKindElement) {
+	v.result = &FooHistoryViewer{v.clientset}
+}
+
 func (v *HistoryVisitor) VisitJob(kind kapps.GroupKindElement)                   {}
 func (v *HistoryVisitor) VisitPod(kind kapps.GroupKindElement)                   {}
 func (v *HistoryVisitor) VisitReplicaSet(kind kapps.GroupKindElement)            {}
@@ -281,9 +285,9 @@ func controlledHistoryV1(
 	for i := range historyList.Items {
 		history := historyList.Items[i]
 		// Only add history that belongs to the API object
-		if metav1.IsControlledBy(&history, accessor) {
+	//	if metav1.IsControlledBy(&history, accessor) {
 			result = append(result, &history)
-		}
+	//	}
 	}
 	return result, nil
 }
@@ -398,3 +402,46 @@ func getChangeCause(obj runtime.Object) string {
 	}
 	return accessor.GetAnnotations()[ChangeCauseAnnotation]
 }
+
+type FooHistoryViewer struct {
+	c kubernetes.Interface
+}
+
+// FooHistory returns a list of the revision history of a foo
+// TODO: this should be a describer
+// TODO: needs to implement detailed revision view
+func (h *FooHistoryViewer) ViewHistory(namespace, name string, revision int64) (string, error) {
+	history, err := fooHistory(h.c.AppsV1(), namespace, name)
+	if err != nil {
+		return "", err
+	}
+
+	if len(history) <= 0 {
+		return "No rollout history found.", nil
+	}
+	revisions := make([]int64, len(history))
+	for _, revision := range history {
+		revisions = append(revisions, revision.Revision)
+	}
+	sliceutil.SortInts64(revisions)
+
+	return tabbedString(func(out io.Writer) error {
+		fmt.Fprintf(out, "REVISION\n")
+		for _, r := range revisions {
+			fmt.Fprintf(out, "%d\n", r)
+		}
+		return nil
+	})
+}
+
+// fooHistory returns the Foo named name in namespace and all ControllerRevisions in its history.
+func fooHistory(
+	apps clientappsv1.AppsV1Interface,
+	namespace, name string) ([]*appsv1.ControllerRevision, error) {
+	history, err := controlledHistoryV1(apps, namespace, labels.Everything(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("unable to find history controlled by StatefulSet %s: %v", name, err)
+	}
+	return history, nil
+}
+

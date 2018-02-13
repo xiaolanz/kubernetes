@@ -33,6 +33,7 @@ type KindVisitor interface {
 	VisitReplicationController(kind GroupKindElement)
 	VisitStatefulSet(kind GroupKindElement)
 	VisitCronJob(kind GroupKindElement)
+	VisitFoo(kind GroupKindElement)
 }
 
 // GroupKindElement defines a Kubernetes API group elem
@@ -57,6 +58,8 @@ func (elem GroupKindElement) Accept(visitor KindVisitor) error {
 		visitor.VisitStatefulSet(elem)
 	case elem.GroupMatch("batch") && elem.Kind == "CronJob":
 		visitor.VisitCronJob(elem)
+	case elem.GroupMatch("samplecontroller") && elem.Kind == "Foo":
+		visitor.VisitFoo(elem)
 	default:
 		return fmt.Errorf("no visitor method exists for %v", elem)
 	}
@@ -87,3 +90,4 @@ func (*NoOpKindVisitor) VisitReplicaSet(kind GroupKindElement)            {}
 func (*NoOpKindVisitor) VisitReplicationController(kind GroupKindElement) {}
 func (*NoOpKindVisitor) VisitStatefulSet(kind GroupKindElement)           {}
 func (*NoOpKindVisitor) VisitCronJob(kind GroupKindElement)               {}
+func (*NoOpKindVisitor) VisitFoo(kind GroupKindElement)               {}
