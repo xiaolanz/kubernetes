@@ -74,6 +74,10 @@ func (v *RollbackVisitor) VisitDaemonSet(kind kapps.GroupKindElement) {
 	v.result = &DaemonSetRollbacker{v.clientset}
 }
 
+func (v *RollbackVisitor) VisitFoo(kind kapps.GroupKindElement) {
+	v.result = &FooRollbacker{v.clientset}
+}
+
 func (v *RollbackVisitor) VisitJob(kind kapps.GroupKindElement)                   {}
 func (v *RollbackVisitor) VisitPod(kind kapps.GroupKindElement)                   {}
 func (v *RollbackVisitor) VisitReplicaSet(kind kapps.GroupKindElement)            {}
@@ -433,3 +437,52 @@ func (h historiesByRevisionV1) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 func (h historiesByRevisionV1) Less(i, j int) bool {
 	return h[i].Revision < h[j].Revision
 }
+type FooRollbacker struct {
+	c kubernetes.Interface
+}
+
+// toRevision is a non-negative integer, with 0 being reserved to indicate rolling back to previous configuration
+func (r *FooRollbacker) Rollback(obj runtime.Object, updatedAnnotations map[string]string, toRevision int64, dryRun bool) (string, error) {
+	if toRevision < 0 {
+		return "", revisionNotFoundErr(toRevision)
+	}
+	accessor, err := meta.Accessor(obj)
+	if err != nil {
+		return "", fmt.Errorf("failed to create accessor for kind %v: %s", obj.GetObjectKind(), err.Error())
+	}
+	sts, history, err := statefulSetHistory(r.c.AppsV1(), accessor.GetNamespace(), accessor.GetName())
+	if err != nil {
+		return "", err
+	}
+	if toRevision == 0 && len(history) <= 1 {
+		return "", fmt.Errorf("no last revision to roll back to")
+	}
+
+	toHistory := findHistoryV1(toRevision, history)
+	if toHistory == nil {
+		return "", revisionNotFoundErr(toRevision)
+	}
+
+	if dryRun {
+		appliedSS, err := statefulset.ApplyRevision(sts, toHistory)
+		if err != nil {
+			return "", err
+		}
+		return printPodTemplate(&appliedSS.Spec.Template)
+	}
+
+	// Skip if the revision already matches current StatefulSet
+	done, err := statefulset.Match(sts, toHistory)
+	if err != nil {
+		return "", err
+	}
+	if done {
+		return fmt.Sprintf("%s (current template already matches revision %d)", rollbackSkipped, toRevision), nil
+	}
+
+	// Restore revision
+	return "", fmt.Errorf("Dry run restoring revision %d: %v", toRevision, err)
+
+	return rollbackSuccess, nil
+}
+
