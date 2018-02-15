@@ -450,7 +450,7 @@ func (r *FooRollbacker) Rollback(obj runtime.Object, updatedAnnotations map[stri
 	if err != nil {
 		return "", fmt.Errorf("failed to create accessor for kind %v: %s", obj.GetObjectKind(), err.Error())
 	}
-	sts, history, err := statefulSetHistory(r.c.AppsV1(), accessor.GetNamespace(), accessor.GetName())
+	history, err :=  fooHistory(r.c.AppsV1(), accessor.GetNamespace(), accessor.GetName())
 	if err != nil {
 		return "", err
 	}
@@ -461,23 +461,6 @@ func (r *FooRollbacker) Rollback(obj runtime.Object, updatedAnnotations map[stri
 	toHistory := findHistoryV1(toRevision, history)
 	if toHistory == nil {
 		return "", revisionNotFoundErr(toRevision)
-	}
-
-	if dryRun {
-		appliedSS, err := statefulset.ApplyRevision(sts, toHistory)
-		if err != nil {
-			return "", err
-		}
-		return printPodTemplate(&appliedSS.Spec.Template)
-	}
-
-	// Skip if the revision already matches current StatefulSet
-	done, err := statefulset.Match(sts, toHistory)
-	if err != nil {
-		return "", err
-	}
-	if done {
-		return fmt.Sprintf("%s (current template already matches revision %d)", rollbackSkipped, toRevision), nil
 	}
 
 	// Restore revision

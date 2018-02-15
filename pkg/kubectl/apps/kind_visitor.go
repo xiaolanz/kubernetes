@@ -58,7 +58,7 @@ func (elem GroupKindElement) Accept(visitor KindVisitor) error {
 		visitor.VisitStatefulSet(elem)
 	case elem.GroupMatch("batch") && elem.Kind == "CronJob":
 		visitor.VisitCronJob(elem)
-	case elem.GroupMatch("samplecontroller") && elem.Kind == "Foo":
+	case elem.GroupMatch("samplecontroller.k8s.io") && elem.Kind == "Foo":
 		visitor.VisitFoo(elem)
 	default:
 		return fmt.Errorf("no visitor method exists for %v", elem)
